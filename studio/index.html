@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>استديو الطرب</title>
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Reem+Kufi:wght@500;700&display=swap">
+<style>
+/* Layout: a sticky transport bar over stacked console panels — rhythm, input (sound card + mic), tracks, mixer. */
+:root{
+  color-scheme:dark;
+  --wood:#1b1512;      /* walnut ground */
+  --panel:#261d18;     /* console panel */
+  --panel-2:#31261f;   /* raised control */
+  --line:#4a3a2f;
+  --ink:#f1e6d6;
+  --ink-dim:#b7a591;
+  --brass:#d9a441;     /* accent: oud rosette brass */
+  --tile:#3fb3a6;      /* secondary: glazed tile turquoise */
+  --dum:#d9a441; --tek:#3fb3a6; --ka:#8fa8c9; --slap:#e07a5f;
+  --ok:#6fcf7c; --warn:#e8c14a; --hot:#e5533d;
+  --display:"Reem Kufi","Noto Kufi Arabic",Tahoma,sans-serif;
+  --body:"IBM Plex Sans Arabic","Noto Sans Arabic","Segoe UI",Tahoma,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{background:var(--wood)}
+body{color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;margin:0}
+#app{max-width:1100px;margin:0 auto;padding-block:16px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--display);font-size:1.9rem;margin:0;line-height:1.2;color:var(--brass);font-weight:700}
+h2{font-family:var(--display);font-size:1.2rem;margin:0;font-weight:500;text-wrap:balance}
+.sub{color:var(--ink-dim);margin:0;font-size:.9rem}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:.82rem;color:var(--ink-dim);min-width:0}
+select,input[type=number],input[type=text]{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;font:inherit;max-width:100%;min-width:0}
+input[type=range]{accent-color:var(--brass);width:100%;min-width:0}
+button{font:inherit;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--brass)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--tile);outline-offset:2px}
+button.on{background:var(--brass);color:#1b1512;border-color:var(--brass);font-weight:600}
+button.small{padding:4px 9px;font-size:.82rem}
+button:disabled{opacity:.45;cursor:not-allowed}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:.88rem;color:var(--ink)}
+.chk input{accent-color:var(--tile);width:17px;height:17px}
+.note{font-size:.84rem;color:var(--ink-dim);margin:0}
+.banner{background:#3a2a16;border:1px solid var(--brass);border-radius:8px;padding:10px 14px;font-size:.9rem}
+.err{border-color:var(--hot);background:#3a1c17}
+
+/* transport */
+#transport{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:#120e0c;border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--wood)}
+.tbtn{width:48px;height:48px;border-radius:50%;padding:0;display:grid;place-items:center;font-size:1.1rem}
+#btnRec{border-color:var(--hot);color:var(--hot)}
+#btnRec.on{background:var(--hot);color:#fff;border-color:var(--hot);animation:pulse 1s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 7px rgba(229,83,61,.25)}}
+@media (prefers-reduced-motion:reduce){#btnRec.on{animation:none}}
+#clock{font-family:var(--mono);font-size:1.5rem;font-variant-numeric:tabular-nums;color:var(--tile);direction:ltr;min-width:6.2ch}
+#state{font-size:.85rem;color:var(--ink-dim)}
+.bpmbox{display:flex;align-items:center;gap:6px;direction:ltr}
+#bpmNum{width:74px;text-align:center;font-family:var(--mono);font-size:1.1rem}
+
+/* rhythm */
+#steps{display:flex;flex-wrap:wrap;gap:6px;direction:ltr}
+.beatgrp{display:flex;gap:4px;padding:4px;border-radius:8px;background:#1f1713}
+.step{width:38px;height:46px;border-radius:6px;border:1px solid var(--line);background:var(--panel-2);padding:0;font-family:var(--display);font-size:.8rem;display:grid;place-items:center;line-height:1.1}
+.step[data-s="D"]{background:var(--dum);color:#1b1512;border-color:var(--dum)}
+.step[data-s="T"]{background:var(--tek);color:#0d2623;border-color:var(--tek)}
+.step[data-s="K"]{background:transparent;color:var(--ka);border-color:var(--ka)}
+.step[data-s="S"]{background:var(--slap);color:#2a0f08;border-color:var(--slap)}
+.step.now{outline:3px solid var(--ink);outline-offset:1px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.82rem;color:var(--ink-dim)}
+.legend b{display:inline-block;width:12px;height:12px;border-radius:3px;margin-inline-end:5px;vertical-align:-1px}
+#rhythmMeta{font-family:var(--mono);color:var(--tile);direction:ltr;font-size:.95rem}
+
+/* meters */
+.hmeter{height:10px;background:#120e0c;border-radius:5px;overflow:hidden;border:1px solid var(--line);direction:ltr}
+.hmeter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ok) 0 65%,var(--warn) 80%,var(--hot))}
+
+/* tracks */
+#tracks{display:flex;flex-direction:column;gap:8px}
+.trk{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr);gap:8px;align-items:stretch}
+.trk-info{display:flex;flex-direction:column;gap:6px;min-width:0}
+.trk-info input[type=text]{padding:4px 6px;font-size:.9rem;width:100%}
+.wavebox{position:relative;background:#120e0c;border:1px solid var(--line);border-radius:6px;min-height:74px;direction:ltr;overflow:hidden;cursor:pointer}
+.wavebox canvas{position:absolute;inset:0;width:100%;height:100%}
+.playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);left:0;pointer-events:none}
+.empty{border:1px dashed var(--line);border-radius:8px;padding:18px;text-align:center;color:var(--ink-dim)}
+@media (max-width:560px){.trk{grid-template-columns:1fr}}
+
+/* mixer */
+#mixerWrap{overflow-x:auto;direction:ltr;padding-bottom:6px}
+#mixer{display:flex;gap:8px;width:max-content}
+.strip{width:104px;background:#1f1713;border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;align-items:stretch;direction:rtl}
+.strip.master{border-color:var(--brass)}
+.strip.rhy{border-color:var(--tile)}
+.strip h3{font-size:.82rem;margin:0;text-align:center;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.knob{display:flex;flex-direction:column;font-size:.7rem;color:var(--ink-dim);gap:0}
+.knob input{height:16px}
+.faderzone{display:flex;justify-content:center;gap:10px;height:150px;direction:ltr}
+.fader{writing-mode:vertical-lr;direction:rtl;width:26px;height:150px}
+.vmeter{width:10px;height:150px;background:#120e0c;border:1px solid var(--line);border-radius:4px;position:relative;overflow:hidden}
+.vmeter i{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(0deg,var(--ok) 0 65%,var(--warn) 80%,var(--hot))}
+.ms{display:flex;gap:4px;justify-content:center}
+.ms button{padding:2px 0;width:38px;font-size:.78rem}
+.ms .m.on{background:var(--warn);border-color:var(--warn)}
+.ms .s.on{background:var(--tile);border-color:var(--tile)}
+.db{font-family:var(--mono);font-size:.72rem;text-align:center;color:var(--ink-dim);direction:ltr}
+
+/* tuner */
+#tunerNote{font-family:var(--display);font-size:2.2rem;color:var(--brass);line-height:1}
+#tunerBar{position:relative;height:14px;background:#120e0c;border:1px solid var(--line);border-radius:7px;direction:ltr}
+#tunerBar::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:var(--ink-dim)}
+#tunerDot{position:absolute;top:1px;width:10px;height:10px;border-radius:50%;background:var(--hot);left:50%;transform:translateX(-50%)}
+.strings{display:flex;flex-wrap:wrap;gap:6px;direction:ltr}
+.strings span{border:1px solid var(--line);border-radius:5px;padding:2px 8px;font-size:.8rem;color:var(--ink-dim)}
+.strings span.hit{border-color:var(--ok);color:var(--ok)}
+</style>
+
+<div id="app" lang="ar" dir="rtl">
+  <header class="top">
+    <h1>استديو الطرب</h1>
+    <p class="sub">سجّل غناءك وعودك على الإيقاع الشرقي، امزج المسارات، وصدّر أغنيتك جاهزة للنشر.</p>
+  </header>
+
+  <div id="previewBanner" class="banner" hidden>هذه معاينة داخل Claude: الإيقاعات والمكسر واستيراد الملفات تعمل هنا، أمّا التسجيل من المايكروفون وتنزيل ملفات WAV فيعملان في النسخة الكاملة المنشورة من المستودع (studio/index.html).</div>
+  <div id="msg" class="banner err" hidden></div>
+
+  <div id="transport">
+    <button id="btnRec" class="tbtn" title="تسجيل" aria-label="تسجيل">●</button>
+    <button id="btnPlay" class="tbtn" title="تشغيل" aria-label="تشغيل">▶</button>
+    <button id="btnStop" class="tbtn" title="إيقاف" aria-label="إيقاف">■</button>
+    <button id="btnZero" class="small" title="العودة للبداية">⏮ البداية</button>
+    <span id="clock">00:00.0</span>
+    <span class="bpmbox">
+      <button id="bpmDown" class="small" aria-label="أبطأ">−</button>
+      <input id="bpmNum" type="number" min="30" max="300" value="90" aria-label="السرعة BPM">
+      <button id="bpmUp" class="small" aria-label="أسرع">+</button>
+      <button id="tap" class="small">TAP</button>
+    </span>
+    <span id="state">جاهز</span>
+  </div>
+
+  <!-- RHYTHM -->
+  <section class="panel" id="secRhythm">
+    <div class="panel-head">
+      <h2>الإيقاع الشرقي</h2>
+      <span id="rhythmMeta"></span>
+    </div>
+    <div class="grid">
+      <label class="f">الإيقاع
+        <select id="rhythmSel"></select>
+      </label>
+      <label class="f">السرعة <span id="bpmLbl"></span>
+        <input id="bpm" type="range" min="30" max="300" value="90">
+      </label>
+      <label class="f">آلة الإيقاع
+        <select id="kit">
+          <option value="darbuka">طبلة (دربكة)</option>
+          <option value="daff">دُفّ (إطار عميق)</option>
+          <option value="riq">طبلة + رِقّ</option>
+        </select>
+      </label>
+      <label class="f">عدّ تمهيدي قبل التسجيل
+        <select id="countIn">
+          <option value="1">مازورة واحدة</option>
+          <option value="2">مازورتان</option>
+          <option value="0">بدون</option>
+        </select>
+      </label>
+    </div>
+    <div id="steps" aria-label="خانات الإيقاع"></div>
+    <div class="legend">
+      <span><b style="background:var(--dum)"></b>دُم</span>
+      <span><b style="background:var(--tek)"></b>تَك</span>
+      <span><b style="border:1px solid var(--ka)"></b>كَ (خفيفة)</span>
+      <span><b style="background:var(--slap)"></b>صفعة</span>
+      <span>اضغط أي خانة لتغيير ضربتها وتأليف إيقاعك.</span>
+    </div>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="rhythmOn" checked> تشغيل الإيقاع</label>
+      <label class="chk"><input type="checkbox" id="ornament"> زخرفة (حشو خفيف)</label>
+      <label class="chk"><input type="checkbox" id="click"> مترونوم</label>
+      <button id="resetPattern" class="small">استرجاع الإيقاع الأصلي</button>
+    </div>
+  </section>
+
+  <!-- INPUT -->
+  <section class="panel" id="secInput">
+    <div class="panel-head">
+      <h2>كرت الصوت والمايكروفون</h2>
+      <button id="btnMic">تفعيل الإدخال</button>
+    </div>
+    <div class="grid">
+      <label class="f">مدخل الصوت (كرت الصوت / المايك)
+        <select id="inDev"><option value="">الافتراضي</option></select>
+      </label>
+      <label class="f">مخرج الصوت (السماعات)
+        <select id="outDev"><option value="">الافتراضي</option></select>
+      </label>
+      <label class="f">قناة الإدخال في الكرت
+        <select id="inCh">
+          <option value="sum">مجموع القناتين</option>
+          <option value="0">المدخل 1 (يسار)</option>
+          <option value="1">المدخل 2 (يمين)</option>
+        </select>
+      </label>
+      <label class="f">حجم المخزن (زمن الاستجابة)
+        <select id="latHint">
+          <option value="interactive">أدنى تأخير</option>
+          <option value="balanced">متوازن</option>
+          <option value="playback">أثبت (تأخير أكبر)</option>
+        </select>
+      </label>
+      <label class="f">نموذج المايكروفون
+        <select id="micModel"></select>
+      </label>
+      <label class="f">كسب الإدخال <span id="inGainLbl">0 dB</span>
+        <input id="inGain" type="range" min="-12" max="24" step="0.5" value="0">
+      </label>
+      <label class="f">تعويض التأخير <span id="compLbl"></span>
+        <input id="comp" type="range" min="0" max="400" step="1" value="0">
+      </label>
+    </div>
+    <p class="note" id="micDesc"></p>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="lowcut" checked> قطع الترددات المنخفضة 80Hz</label>
+      <label class="chk"><input type="checkbox" id="inComp"> ضاغط إدخال ناعم</label>
+      <label class="chk"><input type="checkbox" id="monitor"> مراقبة مباشرة (بالسماعات فقط)</label>
+      <label class="chk"><input type="checkbox" id="rawMode" checked> إدخال خام للموسيقى (بدون معالجة الهاتف)</label>
+    </div>
+    <div>
+      <div class="hmeter"><i id="inMeter"></i></div>
+      <p class="note" id="cardInfo">الإدخال غير مفعّل بعد.</p>
+    </div>
+    <div class="row" style="align-items:flex-start">
+      <div style="min-width:120px">
+        <div class="note">دوزان العود</div>
+        <div id="tunerNote">—</div>
+        <div class="note" id="tunerHz">فعّل الإدخال واضرب وترًا</div>
+      </div>
+      <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px">
+        <div id="tunerBar"><div id="tunerDot"></div></div>
+        <div class="strings" id="strings"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRACKS -->
+  <section class="panel" id="secTracks">
+    <div class="panel-head">
+      <h2>المسارات</h2>
+      <div class="row">
+        <label class="chk"><button id="btnImport" class="small" type="button">استيراد ملف صوتي</button></label>
+        <input id="fileIn" type="file" accept="audio/*" hidden>
+      </div>
+    </div>
+    <div id="tracks"></div>
+    <p class="note">سجّل العود أولًا على الإيقاع، ثم اضغط تسجيل مرة أخرى لإضافة الغناء فوقه. استعمل السماعات حتى لا يتسرّب الإيقاع إلى المايك. اضغط على الموجة للانتقال إلى أي موضع.</p>
+  </section>
+
+  <!-- MIXER -->
+  <section class="panel" id="secMixer">
+    <div class="panel-head">
+      <h2>المكسر</h2>
+      <div class="row">
+        <label class="f" style="flex-direction:row;align-items:center;gap:6px">الصدى
+          <select id="revType">
+            <option value="room">غرفة</option>
+            <option value="hall" selected>قاعة طرب</option>
+            <option value="plate">صفيحة لامعة</option>
+          </select>
+        </label>
+        <label class="chk"><input type="checkbox" id="limiter" checked> محدِّد على الماستر</label>
+      </div>
+    </div>
+    <div id="mixerWrap"><div id="mixer"></div></div>
+  </section>
+
+  <!-- EXPORT -->
+  <section class="panel" id="secExport">
+    <div class="panel-head"><h2>التصدير للنشر</h2></div>
+    <div class="row">
+      <button id="btnExport" class="on">تصدير المزج النهائي WAV</button>
+      <label class="chk"><input type="checkbox" id="expRhythm" checked> تضمين الإيقاع في المزج</label>
+      <span class="note" id="expState"></span>
+    </div>
+    <p class="note">الملف الناتج WAV ستيريو 16-بت بجودة الاستديو، يصلح للرفع مباشرة أو للتحويل إلى MP3. التسجيلات محفوظة في هذه الصفحة فقط: صدّر عملك قبل إغلاقها.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+document.documentElement.lang = 'ar'; document.documentElement.dir = 'rtl';
+const $ = id => document.getElementById(id);
+const PREVIEW = !!window.claude;
+if (PREVIEW) $('previewBanner').hidden = false;
+
+/* ---------- Rhythm library ----------
+   p: pattern, one char per step. D=dum T=tek K=ka S=slap -=rest
+   spb: steps per quarter-note beat. grp: step grouping for display/accents. */
+const RHYTHMS = [
+ {g:'مصري وشامي', n:'مقسوم', sig:'4/4', spb:2, bpm:95, p:'DT-TD-T-'},
+ {g:'مصري وشامي', n:'بلدي (مصمودي صغير)', sig:'4/4', spb:2, bpm:90, p:'DD-TD-T-'},
+ {g:'مصري وشامي', n:'صعيدي', sig:'4/4', spb:2, bpm:100, p:'DT-DD-T-'},
+ {g:'مصري وشامي', n:'وحدة', sig:'4/4', spb:2, bpm:80, p:'D--T--T-'},
+ {g:'مصري وشامي', n:'مصمودي كبير', sig:'8/4', spb:2, bpm:110, p:'D-D-TKT-D-TKT-TK'},
+ {g:'مصري وشامي', n:'شفتتلّي', sig:'8/4', spb:2, bpm:100, p:'D--T--T-D-D-T---'},
+ {g:'مصري وشامي', n:'ملفوف (لفّ)', sig:'2/4', spb:4, bpm:100, p:'D--T--T-'},
+ {g:'مصري وشامي', n:'أيوب (زار)', sig:'2/4', spb:4, bpm:95, p:'D--KD-T-'},
+ {g:'مصري وشامي', n:'فلاحي', sig:'2/4', spb:4, bpm:125, p:'DT-TD-T-'},
+ {g:'مصري وشامي', n:'كراتشي', sig:'2/4', spb:4, bpm:100, p:'T--KT-D-'},
+ {g:'مصري وشامي', n:'زفّة', sig:'4/4', spb:4, bpm:90, p:'D-TKT-T-D-T-T---'},
+ {g:'مصري وشامي', n:'كتاكفتي', sig:'4/4', spb:2, bpm:110, p:'DKTKDDTK'},
+ {g:'مصري وشامي', n:'نوّاري (دبكة)', sig:'4/4', spb:2, bpm:105, p:'KD-TD-T-'},
+ {g:'مصري وشامي', n:'جيرك', sig:'4/4', spb:2, bpm:115, p:'D-TKDDT-'},
+ {g:'مصري وشامي', n:'فوكس', sig:'2/4', spb:2, bpm:120, p:'DTDT'},
+ {g:'خليجي ومغربي', n:'خليجي', sig:'2/4', spb:4, bpm:95, p:'D--D--T-'},
+ {g:'خليجي ومغربي', n:'مغربي 6/8', sig:'6/8', spb:2, bpm:150, p:'DKTDKT', grp:[3,3]},
+ {g:'ثلاثي وسداسي', n:'سماعي دارج', sig:'3/4', spb:2, bpm:120, p:'D-T-T-'},
+ {g:'ثلاثي وسداسي', n:'فالس', sig:'3/4', spb:1, bpm:130, p:'DTT'},
+ {g:'ثلاثي وسداسي', n:'يورك سماعي', sig:'6/8', spb:2, bpm:160, p:'DTTDT-', grp:[3,3]},
+ {g:'أعرج وموشحات', n:'سماعي ثقيل', sig:'10/8', spb:2, bpm:100, p:'D--T-DDT--', grp:[3,2,2,3]},
+ {g:'أعرج وموشحات', n:'جورجينا', sig:'10/8', spb:2, bpm:170, p:'D-TT-D-T--', grp:[3,2,2,3]},
+ {g:'أعرج وموشحات', n:'دور هندي', sig:'7/8', spb:2, bpm:150, p:'DTTD-T-', grp:[3,2,2]},
+ {g:'أعرج وموشحات', n:'أقصاق', sig:'9/8', spb:2, bpm:160, p:'D-T-D-TKT', grp:[2,2,2,3]},
+];
+
+/* ---------- Mic voicings (EQ curves in the spirit of classic mic types) ---------- */
+const MICS = [
+ {n:'طبيعي (بدون تلوين)', d:'الإشارة كما تدخل من الكرت دون أي تلوين.', f:[]},
+ {n:'مكثّف استديو واسع الغشاء', d:'دفء في الوسط ولمعة ناعمة في الأعلى؛ الخيار الكلاسيكي للغناء الطربي.', f:[['peaking',180,1.5,.8],['peaking',4500,2,.9],['highshelf',10000,2.5]]},
+ {n:'مكثّف لامع حديث', d:'حضور واضح وهواء في القمة؛ يبرز مخارج الحروف وتفاصيل الريشة.', f:[['peaking',300,-1.5,1],['peaking',6000,3,.8],['highshelf',12000,4]]},
+ {n:'ديناميكي للغناء المباشر', d:'وسط قوي متقدّم وقمة مقصوصة؛ يتحمّل الصوت العالي ويقلّل ضجيج الغرفة.', f:[['peaking',200,-2,1],['peaking',3500,4,1],['highshelf',9000,-3]]},
+ {n:'ديناميكي إذاعي عميق', d:'قرار ممتلئ وسلاسة في الأعلى؛ للصوت الرخيم والإلقاء.', f:[['lowshelf',160,3],['peaking',400,-2,1.2],['peaking',2800,2,1],['highshelf',8000,-2]]},
+ {n:'شريطي Ribbon قديم', d:'نعومة داكنة بطابع التسجيلات القديمة؛ جميل للتقاسيم والمواويل.', f:[['lowshelf',220,2.5],['peaking',2500,-1,.8],['highshelf',6000,-6]]},
+ {n:'مكثّف صغير الغشاء للآلات', d:'استجابة سريعة ومستوية مع لمسة هواء؛ مخصّص لالتقاط العود.', f:[['peaking',120,-2,1],['peaking',2200,1.5,1],['highshelf',9000,3]]},
+ {n:'عود قريب (كبح الطنين)', d:'يخفّف طنين القصعة عند 150–250Hz ويبرز نقر الريشة.', f:[['peaking',200,-5,1.2],['peaking',1200,1.5,1],['peaking',4000,3,1],['highshelf',10000,1.5]]},
+];
+
+/* ---------- State ---------- */
+let ctx = null, master = null;
+const S = {
+  bpm: 90, rhythm: 0, pattern: RHYTHMS[0].p.split(''),
+  playing: false, recording: false, pos: 0,
+  originTime: 0, startPos: 0, t0: 0,
+  nextStep: 0, nextStepTime: 0, timer: null,
+  tracks: [], seq: 1,
+  rhy: {vol: .8, pan: 0, mute: false, solo: false, low: 0, mid: 0, high: 0, send: .1, name: 'الإيقاع'},
+  mst: {vol: .9},
+};
+let input = null;       // live input chain
+let recChunks = [], recFirstFrame = -1;
+const uiSteps = [];     // {time, idx} queue for the step highlight
+
+const say = (t) => { $('state').textContent = t; };
+const fail = (t) => { const m = $('msg'); m.textContent = t; m.hidden = !t; };
+const dB = v => v <= 0.0005 ? '−∞' : (20 * Math.log10(v)).toFixed(1) + ' dB';
+
+/* ---------- Audio engine ---------- */
+function noiseBuf(c) {
+  if (c._noise) return c._noise;
+  const b = c.createBuffer(1, c.sampleRate, c.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return (c._noise = b);
+}
+function makeIR(c, type) {
+  const cfg = {room: [.7, 3.2, 9000], hall: [2.4, 2.2, 6500], plate: [1.5, 2.6, 14000]}[type] || [2, 2.5, 7000];
+  const len = Math.floor(c.sampleRate * cfg[0]), b = c.createBuffer(2, len, c.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = b.getChannelData(ch); let lp = 0;
+    const a = Math.exp(-2 * Math.PI * cfg[2] / c.sampleRate);
+    for (let i = 0; i < len; i++) {
+      const x = (Math.random() * 2 - 1) * Math.pow(1 - i / len, cfg[1]);
+      lp = (1 - a) * x + a * lp; d[i] = lp;
+    }
+  }
+  return b;
+}
+/* master bus: strips -> sum -> limiter -> out ; reverb return -> sum */
+function buildMaster(c, dest, opts) {
+  const sum = c.createGain(), out = c.createGain(), rev = c.createConvolver(), revRet = c.createGain();
+  const lim = c.createDynamicsCompressor();
+  lim.threshold.value = -3; lim.knee.value = 2; lim.ratio.value = 12; lim.attack.value = .003; lim.release.value = .12;
+  rev.buffer = makeIR(c, opts.revType); revRet.gain.value = 1;
+  rev.connect(revRet).connect(sum);
+  out.gain.value = opts.vol;
+  const an = c.createAnalyser(); an.fftSize = 1024;
+  const m = {sum, out, rev, lim, an, limOn: null};
+  m.setLimiter = on => {
+    if (m.limOn === on) return; m.limOn = on;
+    sum.disconnect(); lim.disconnect();
+    if (on) { sum.connect(lim); lim.connect(out); } else sum.connect(out);
+  };
+  m.setLimiter(opts.limiter);
+  out.connect(an); out.connect(dest);
+  return m;
+}
+function buildStrip(c, m, p) {
+  const inp = c.createGain(), lo = c.createBiquadFilter(), mid = c.createBiquadFilter(), hi = c.createBiquadFilter();
+  const fad = c.createGain(), pan = c.createStereoPanner(), send = c.createGain(), an = c.createAnalyser();
+  lo.type = 'lowshelf'; lo.frequency.value = 180;
+  mid.type = 'peaking'; mid.frequency.value = 1200; mid.Q.value = .8;
+  hi.type = 'highshelf'; hi.frequency.value = 6000; an.fftSize = 1024;
+  inp.connect(lo).connect(mid).connect(hi).connect(fad).connect(pan).connect(m.sum);
+  fad.connect(send).connect(m.rev); fad.connect(an);
+  const s = {inp, lo, mid, hi, fad, pan, send, an};
+  s.apply = (p, audible) => {
+    lo.gain.value = p.low; mid.gain.value = p.mid; hi.gain.value = p.high;
+    fad.gain.value = audible ? p.vol : 0; pan.pan.value = p.pan; send.gain.value = p.send;
+  };
+  return s;
+}
+const audible = p => {
+  const anySolo = S.rhy.solo || S.tracks.some(t => t.solo);
+  return !p.mute && (!anySolo || p.solo);
+};
+function applyAll() {
+  if (!ctx) return;
+  S.rhy.strip.apply(S.rhy, audible(S.rhy));
+  S.tracks.forEach(t => t.strip && t.strip.apply(t, audible(t)));
+  master.out.gain.value = S.mst.vol;
+  master.setLimiter($('limiter').checked);
+}
+async function ensureCtx() {
+  if (ctx) { if (ctx.state === 'suspended') await ctx.resume(); return ctx; }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  ctx = new AC({latencyHint: $('latHint').value});
+  master = buildMaster(ctx, ctx.destination, {revType: $('revType').value, vol: S.mst.vol, limiter: $('limiter').checked});
+  S.rhy.strip = buildStrip(ctx, master, S.rhy);
+  S.tracks.forEach(t => t.strip = buildStrip(ctx, master, t));
+  applyAll();
+  const out = $('outDev').value;
+  if (out && ctx.setSinkId) ctx.setSinkId(out).catch(() => {});
+  if (ctx.state === 'suspended') await ctx.resume();
+  const lat = Math.round(((ctx.outputLatency || 0) + (ctx.baseLatency || 0)) * 1000);
+  if (!$('comp').dataset.touched) { $('comp').value = Math.min(400, lat + 20); updComp(); }
+  requestAnimationFrame(frame);
+  return ctx;
+}
+
+/* ---------- Drum synthesis (works on live and offline contexts) ---------- */
+function env(c, t, peak, dur) {
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(peak, .0002), t + .002);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  return g;
+}
+function tone(c, dest, t, f0, f1, dur, peak, type) {
+  const o = c.createOscillator(); o.type = type || 'sine';
+  o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur * .6);
+  o.connect(env(c, t, peak, dur)).connect(dest); o.start(t); o.stop(t + dur + .02);
+}
+function noise(c, dest, t, type, freq, q, dur, peak) {
+  const s = c.createBufferSource(); s.buffer = noiseBuf(c);
+  const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  s.connect(f).connect(env(c, t, peak, dur)).connect(dest);
+  s.start(t, Math.random() * .5, dur + .05);
+}
+function hit(c, dest, t, s, vel, kit) {
+  const deep = kit === 'daff';
+  if (s === 'D') {
+    tone(c, dest, t, deep ? 110 : 150, deep ? 52 : 68, deep ? .5 : .34, vel);
+    tone(c, dest, t, deep ? 220 : 300, 140, .08, vel * .3, 'triangle');
+    noise(c, dest, t, 'lowpass', 900, .7, .03, vel * .5);
+  } else if (s === 'T') {
+    noise(c, dest, t, 'bandpass', deep ? 1700 : 2600, 2.2, deep ? .12 : .08, vel * .9);
+    tone(c, dest, t, deep ? 520 : 880, deep ? 400 : 620, .06, vel * .35, 'triangle');
+  } else if (s === 'K') {
+    noise(c, dest, t, 'bandpass', deep ? 2300 : 3600, 3, .045, vel * .55);
+    tone(c, dest, t, 1150, 900, .03, vel * .15, 'triangle');
+  } else if (s === 'S') {
+    noise(c, dest, t, 'lowpass', 1500, 1, .07, vel);
+    tone(c, dest, t, 420, 260, .05, vel * .4, 'triangle');
+  }
+  if (kit === 'riq' && s !== '-') noise(c, dest, t, 'highpass', 7000, .8, s === 'D' ? .12 : .07, vel * .3);
+}
+function clickAt(c, dest, t, strong) { tone(c, dest, t, strong ? 1800 : 1200, strong ? 1800 : 1200, .03, strong ? .5 : .3, 'square'); }
+const R = () => RHYTHMS[S.rhythm];
+const stepDur = () => 60 / S.bpm / R().spb;
+function groups() {
+  const r = R(), n = S.pattern.length;
+  if (r.grp) return r.grp;
+  const size = r.spb === 1 ? n : r.spb, g = [];
+  for (let i = 0; i < n; i += size) g.push(Math.min(size, n - i));
+  return g;
+}
+function beatStarts() { const b = []; let a = 0; groups().forEach(g => { b.push(a); a += g; }); return b; }
+/* schedule one step of the rhythm on context c */
+function playStep(c, dest, t, idx, o) {
+  const n = S.pattern.length, i = idx % n, s = S.pattern[i], starts = beatStarts();
+  if (o.rhythm) {
+    if (s !== '-') hit(c, dest, t, s, i === 0 ? 1 : (s === 'K' ? .6 : .85), o.kit);
+    else if (o.ornament) hit(c, dest, t, 'K', .22, o.kit);
+    if (o.kit === 'riq' && starts.includes(i) && s === '-') noise(c, dest, t, 'highpass', 7000, .8, .06, .2);
+  }
+  if (o.click && starts.includes(i)) clickAt(c, dest, t, i === 0);
+}
+const rhyOpts = () => ({rhythm: $('rhythmOn').checked, ornament: $('ornament').checked, click: $('click').checked, kit: $('kit').value});
+
+function scheduler() {
+  const o = rhyOpts();
+  while (S.nextStepTime < ctx.currentTime + .14) {
+    if (S.nextStepTime >= ctx.currentTime - .02) {
+      playStep(ctx, S.rhy.strip.inp, S.nextStepTime, S.nextStep, o);
+      uiSteps.push({time: S.nextStepTime, idx: S.nextStep % S.pattern.length});
+    }
+    S.nextStep++; S.nextStepTime += stepDur();
+  }
+}
+
+/* ---------- Transport ---------- */
+function barDur() { return S.pattern.length * stepDur(); }
+async function start(record) {
+  if (S.playing) return;
+  fail('');
+  await ensureCtx();
+  if (record) {
+    if (!input) { await enableInput(); }
+    if (!input) return;
+  }
+  const bars = record ? +$('countIn').value : 0;
+  const lead = .12, now = ctx.currentTime;
+  const t0 = now + lead + bars * barDur();
+  S.t0 = t0; S.startPos = S.pos; S.originTime = t0 - S.pos;
+  // count-in clicks
+  if (bars) {
+    const starts = beatStarts(), sd = stepDur(), n = S.pattern.length;
+    for (let b = 0; b < bars; b++) starts.forEach(st => clickAt(ctx, master.sum, now + lead + (b * n + st) * sd, st === 0));
+  }
+  S.nextStep = Math.ceil(S.pos / stepDur() - 1e-6);
+  S.nextStepTime = S.originTime + S.nextStep * stepDur();
+  S.tracks.forEach(t => {
+    const src = ctx.createBufferSource(); src.buffer = t.buffer; src.connect(t.strip.inp);
+    const rel = S.pos - t.offset;
+    if (rel >= t.buffer.duration) return;
+    if (rel >= 0) src.start(t0, rel); else src.start(t0 - rel, 0);
+    t.src = src;
+  });
+  if (record) {
+    recChunks = []; recFirstFrame = -1;
+    input.rec.port.postMessage({on: true});
+    S.recording = true; $('btnRec').classList.add('on');
+    say(bars ? 'عدّ تمهيدي… ثم تسجيل' : 'يسجّل');
+  } else say('يعزف');
+  S.playing = true; $('btnPlay').classList.add('on');
+  scheduler(); S.timer = setInterval(scheduler, 25);
+}
+function stop() {
+  if (!S.playing) return;
+  clearInterval(S.timer); S.timer = null;
+  const endPos = Math.max(S.startPos, ctx.currentTime - S.originTime);
+  S.tracks.forEach(t => { if (t.src) { try { t.src.stop(); } catch (e) {} t.src = null; } });
+  S.playing = false; $('btnPlay').classList.remove('on');
+  uiSteps.length = 0; markStep(-1);
+  if (S.recording) {
+    S.recording = false; $('btnRec').classList.remove('on');
+    input.rec.port.postMessage({on: false});
+    setTimeout(() => finishRecording(endPos), 120);
+  }
+  S.pos = S.recording ? S.startPos : endPos;
+  say('متوقف');
+}
+function finishRecording() {
+  const total = recChunks.reduce((a, b) => a + b.length, 0);
+  if (!total || recFirstFrame < 0) { fail('لم تصل أي إشارة من المدخل. تأكد من اختيار كرت الصوت الصحيح ومن إذن المايكروفون.'); return; }
+  const sr = ctx.sampleRate, comp = +$('comp').value / 1000;
+  // sample captured at graph time t was performed against transport time t - comp
+  const skip = Math.round((S.t0 + comp) * sr) - recFirstFrame;
+  let data = new Float32Array(total), o = 0;
+  recChunks.forEach(c => { data.set(c, o); o += c.length; });
+  recChunks = [];
+  let offset = S.startPos;
+  if (skip > 0) data = data.subarray(Math.min(skip, data.length)); else offset += -skip / sr;
+  if (data.length < sr * .1) { fail('التسجيل قصير جدًا. انتظر انتهاء العدّ التمهيدي ثم اعزف.'); return; }
+  const buf = ctx.createBuffer(1, data.length, sr); buf.getChannelData(0).set(data);
+  addTrack(buf, 'مسار ' + S.seq, offset);
+  S.pos = S.startPos; say('أُضيف التسجيل كمسار جديد');
+}
+function addTrack(buffer, name, offset) {
+  const t = {id: S.seq++, name, buffer, offset: offset || 0, vol: .85, pan: 0, mute: false, solo: false, low: 0, mid: 0, high: 0, send: .15};
+  if (ctx) t.strip = buildStrip(ctx, master, t);
+  S.tracks.push(t); applyAll(); renderTracks(); renderMixer();
+}
+function songLen() { return S.tracks.reduce((m, t) => Math.max(m, t.offset + t.buffer.duration), 0); }
+
+/* ---------- Input chain: device -> channel pick -> gain -> low cut -> mic model -> comp -> recorder ---------- */
+const WORKLET = `class Rec extends AudioWorkletProcessor{
+constructor(){super();this.on=false;this.buf=new Float32Array(4096);this.n=0;this.f=0;
+this.port.onmessage=e=>{if(!e.data.on&&this.on)this.flush();this.on=e.data.on;};}
+flush(){if(this.n){this.port.postMessage({f:this.f,b:this.buf.slice(0,this.n)});this.n=0;}}
+process(inputs){const i=inputs[0];if(this.on&&i&&i[0]){const x=i[0];if(this.n===0)this.f=currentFrame;
+if(this.n+x.length>this.buf.length){this.flush();this.f=currentFrame;}this.buf.set(x,this.n);this.n+=x.length;}return true;}}
+registerProcessor('rec',Rec);`;
+let workletReady = null;
+async function enableInput() {
+  await ensureCtx();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    fail(PREVIEW ? 'التسجيل من المايكروفون غير متاح داخل المعاينة. افتح النسخة الكاملة من المستودع.' : 'المتصفح لا يسمح بالمايكروفون هنا. افتح الصفحة عبر HTTPS.');
+    return;
+  }
+  const raw = $('rawMode').checked, dev = $('inDev').value;
+  const audio = {echoCancellation: !raw, noiseSuppression: !raw, autoGainControl: !raw, channelCount: {ideal: 2}};
+  if (dev) audio.deviceId = {exact: dev};
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({audio}); }
+  catch (e) {
+    fail(PREVIEW ? 'التسجيل من المايكروفون غير متاح داخل المعاينة. افتح النسخة الكاملة من المستودع.' :
+      (e.name === 'NotAllowedError' ? 'رُفض إذن المايكروفون. اسمح به من إعدادات المتصفح ثم أعد المحاولة.' : 'تعذّر فتح مدخل الصوت: ' + e.message));
+    return;
+  }
+  disposeInput();
+  if (!workletReady) workletReady = ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], {type: 'application/javascript'})));
+  await workletReady;
+  const src = ctx.createMediaStreamSource(stream), split = ctx.createChannelSplitter(2);
+  const pick = ctx.createGain(); pick.channelCount = 1; pick.channelCountMode = 'explicit';
+  const gain = ctx.createGain(), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.Q.value = .7;
+  const model = ctx.createGain(), post = ctx.createGain(), cmp = ctx.createDynamicsCompressor();
+  cmp.threshold.value = -20; cmp.ratio.value = 3; cmp.attack.value = .01; cmp.release.value = .2; cmp.knee.value = 10;
+  const an = ctx.createAnalyser(); an.fftSize = 4096;
+  const rec = new AudioWorkletNode(ctx, 'rec', {numberOfInputs: 1, numberOfOutputs: 0, channelCount: 1, channelCountMode: 'explicit'});
+  rec.port.onmessage = e => { if (recFirstFrame < 0) recFirstFrame = e.data.f; recChunks.push(e.data.b); };
+  const mon = ctx.createGain();
+  src.connect(split);
+  pick.connect(gain).connect(hp).connect(model);
+  post.connect(an); post.connect(rec); post.connect(mon).connect(master.sum);
+  input = {stream, src, split, pick, gain, hp, model, post, cmp, an, rec, mon, filters: []};
+  applyInput();
+  const tr = stream.getAudioTracks()[0], st = tr.getSettings ? tr.getSettings() : {};
+  const outMs = Math.round(((ctx.outputLatency || 0) + (ctx.baseLatency || 0)) * 1000);
+  $('cardInfo').textContent = `${tr.label || 'مدخل صوت'} · ${ctx.sampleRate} Hz · ${st.channelCount || 1} قناة · تأخير الإخراج ≈ ${outMs}ms`;
+  $('btnMic').textContent = 'الإدخال مفعّل'; $('btnMic').classList.add('on');
+  listDevices();
+}
+function disposeInput() {
+  if (!input) return;
+  input.stream.getTracks().forEach(t => t.stop());
+  [input.src, input.split, input.pick, input.post, input.mon].forEach(n => { try { n.disconnect(); } catch (e) {} });
+  input = null;
+}
+function applyInput() {
+  if (!input) return;
+  const I = input, ch = $('inCh').value;
+  try { I.src.disconnect(I.pick); } catch (e) {}
+  try { I.split.disconnect(I.pick); } catch (e) {}
+  if (ch === 'sum') I.src.connect(I.pick); else I.split.connect(I.pick, +ch);
+  I.gain.gain.value = Math.pow(10, +$('inGain').value / 20);
+  I.hp.frequency.value = $('lowcut').checked ? 80 : 15;
+  // rebuild mic model + compressor chain
+  I.model.disconnect(); I.filters.forEach(f => f.disconnect()); I.cmp.disconnect();
+  I.filters = MICS[+$('micModel').value].f.map(([type, f, g, q]) => {
+    const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.gain.value = g; if (q) b.Q.value = q; return b;
+  });
+  let node = I.model;
+  I.filters.forEach(f => { node.connect(f); node = f; });
+  if ($('inComp').checked) { node.connect(I.cmp); node = I.cmp; }
+  node.connect(I.post);
+  I.mon.gain.value = $('monitor').checked ? 1 : 0;
+}
+async function listDevices() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  let devs = []; try { devs = await navigator.mediaDevices.enumerateDevices(); } catch (e) { return; }
+  const fill = (sel, kind, label) => {
+    const cur = sel.value; sel.textContent = '';
+    sel.add(new Option('الافتراضي', ''));
+    devs.filter(d => d.kind === kind && d.deviceId && d.deviceId !== 'default').forEach((d, i) => sel.add(new Option(d.label || `${label} ${i + 1}`, d.deviceId)));
+    sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+  };
+  fill($('inDev'), 'audioinput', 'مدخل'); fill($('outDev'), 'audiooutput', 'مخرج');
+}
+
+/* ---------- Tuner (autocorrelation) ---------- */
+const NOTES = ['دو', 'دو♯', 'ري', 'مي♭', 'مي', 'فا', 'فا♯', 'صول', 'صول♯', 'لا', 'سي♭', 'سي'];
+const OUD = [['دو', 36], ['فا', 41], ['لا', 45], ['ري', 50], ['صول', 55], ['دو', 60]];
+$('strings').innerHTML = OUD.map((s, i) => `<span data-m="${s[1]}">${6 - i}: ${s[0]}</span>`).join('');
+const tbuf = new Float32Array(4096); let tunerTick = 0;
+function detectPitch(buf, sr) {
+  let rms = 0; for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i];
+  if (Math.sqrt(rms / buf.length) < .012) return 0;
+  const minLag = Math.floor(sr / 700), maxLag = Math.floor(sr / 55), n = buf.length - maxLag;
+  let best = 0, bestLag = 0; const c = new Float32Array(maxLag + 2);
+  for (let lag = minLag; lag <= maxLag + 1; lag++) {
+    let s = 0, e = 0;
+    for (let i = 0; i < n; i += 2) { s += buf[i] * buf[i + lag]; e += buf[i] * buf[i] + buf[i + lag] * buf[i + lag]; }
+    c[lag] = e ? 2 * s / e : 0;
+  }
+  for (let lag = minLag + 1; lag <= maxLag; lag++) {
+    if (c[lag] > c[lag - 1] && c[lag] >= c[lag + 1] && c[lag] > .85) { best = c[lag]; bestLag = lag; break; }
+  }
+  if (!bestLag) return 0;
+  const a = c[bestLag - 1], b = c[bestLag], d = c[bestLag + 1], shift = (a - d) / (2 * (a - 2 * b + d) || 1);
+  return sr / (bestLag + shift);
+}
+function tuner() {
+  if (!input || S.playing) return;
+  input.an.getFloatTimeDomainData(tbuf);
+  const f = detectPitch(tbuf, ctx.sampleRate);
+  if (!f) return;
+  const m = 69 + 12 * Math.log2(f / 440), near = Math.round(m), cents = Math.round((m - near) * 100);
+  $('tunerNote').textContent = NOTES[((near % 12) + 12) % 12];
+  $('tunerHz').textContent = `${f.toFixed(1)} Hz · ${cents > 0 ? '+' : ''}${cents} سنت`;
+  const dot = $('tunerDot'); dot.style.left = (50 + cents) + '%';
+  dot.style.background = Math.abs(cents) <= 5 ? 'var(--ok)' : 'var(--hot)';
+  document.querySelectorAll('#strings span').forEach(s => s.classList.toggle('hit', +s.dataset.m === near && Math.abs(cents) <= 8));
+}
+
+/* ---------- Animation: clock, meters, step highlight, playheads ---------- */
+const mbuf = new Float32Array(1024);
+function level(an) {
+  an.getFloatTimeDomainData(mbuf); let p = 0;
+  for (let i = 0; i < mbuf.length; i++) { const a = Math.abs(mbuf[i]); if (a > p) p = a; }
+  return Math.min(1, Math.max(0, (20 * Math.log10(p + 1e-6) + 54) / 54));
+}
+function markStep(i) { document.querySelectorAll('.step').forEach((el, k) => el.classList.toggle('now', k === i)); }
+function fmt(t) { const m = Math.floor(t / 60), s = t - m * 60; return String(m).padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0'); }
+function frame() {
+  let pos = S.pos;
+  if (S.playing) {
+    pos = ctx.currentTime - S.originTime;
+    while (uiSteps.length && uiSteps[0].time <= ctx.currentTime) markStep(uiSteps.shift().idx);
+    const L = songLen();
+    if (!S.recording && L > 0 && pos > L + 1.5 && S.tracks.length) { stop(); S.pos = 0; }
+  }
+  $('clock').textContent = (pos < 0 ? '-' : '') + fmt(Math.abs(pos));
+  const L = Math.max(songLen(), 1);
+  document.querySelectorAll('.playhead').forEach(p => p.style.left = Math.max(0, Math.min(100, pos / L * 100)) + '%');
+  if (input) $('inMeter').style.width = level(input.an) * 100 + '%';
+  document.querySelectorAll('.vmeter i').forEach(el => {
+    const k = el.dataset.k, an = k === 'm' ? master.an : k === 'r' ? S.rhy.strip.an : (S.tracks.find(t => t.id == k) || {}).strip?.an;
+    if (an) el.style.height = level(an) * 100 + '%';
+  });
+  if (++tunerTick % 6 === 0) tuner();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- UI: rhythm ---------- */
+function renderSteps() {
+  const box = $('steps'); box.textContent = ''; let i = 0;
+  const label = {D: 'دُم', T: 'تَك', K: 'كَ', S: 'صف', '-': '·'};
+  groups().forEach(g => {
+    const grp = document.createElement('div'); grp.className = 'beatgrp';
+    for (let k = 0; k < g; k++, i++) {
+      const b = document.createElement('button'), idx = i;
+      b.className = 'step'; b.dataset.s = S.pattern[idx]; b.textContent = label[S.pattern[idx]];
+      b.setAttribute('aria-label', 'خانة ' + (idx + 1) + ': ' + label[S.pattern[idx]]);
+      b.onclick = () => { const o = 'DTKS-'; S.pattern[idx] = o[(o.indexOf(S.pattern[idx]) + 1) % 5]; renderSteps(); };
+      grp.appendChild(b);
+    }
+    box.appendChild(grp);
+  });
+  $('rhythmMeta').textContent = R().sig + ' · ' + S.pattern.join(' ');
+}
+function setBpm(v, keep) {
+  S.bpm = Math.max(30, Math.min(300, Math.round(v) || 90));
+  $('bpm').value = S.bpm; if (!keep) $('bpmNum').value = S.bpm; $('bpmLbl').textContent = S.bpm + ' BPM';
+}
+function setRhythm(i) {
+  S.rhythm = i; S.pattern = R().p.split(''); setBpm(R().bpm); renderSteps();
+  if (S.playing) { S.nextStep = 0; }
+}
+(function initSelects() {
+  const sel = $('rhythmSel'); let grp = null, last = '';
+  RHYTHMS.forEach((r, i) => {
+    if (r.g !== last) { grp = document.createElement('optgroup'); grp.label = r.g; sel.appendChild(grp); last = r.g; }
+    grp.appendChild(new Option(`${r.n} — ${r.sig}`, i));
+  });
+  MICS.forEach((m, i) => $('micModel').add(new Option(m.n, i)));
+  $('micModel').value = 1; $('micDesc').textContent = MICS[1].d;
+})();
+$('rhythmSel').onchange = e => setRhythm(+e.target.value);
+$('bpm').oninput = e => setBpm(+e.target.value);
+$('bpmNum').onchange = e => setBpm(+e.target.value);
+$('bpmUp').onclick = () => setBpm(S.bpm + 1);
+$('bpmDown').onclick = () => setBpm(S.bpm - 1);
+$('resetPattern').onclick = () => { S.pattern = R().p.split(''); renderSteps(); };
+let taps = [];
+$('tap').onclick = () => {
+  const n = performance.now(); taps = taps.filter(t => n - t < 2500); taps.push(n);
+  if (taps.length >= 2) setBpm(60000 / ((taps[taps.length - 1] - taps[0]) / (taps.length - 1)));
+};
+
+/* ---------- UI: transport ---------- */
+$('btnPlay').onclick = () => S.playing ? stop() : start(false);
+$('btnRec').onclick = () => S.playing ? stop() : start(true);
+$('btnStop').onclick = () => stop();
+$('btnZero').onclick = () => { const was = S.playing && !S.recording; stop(); if (!S.recording) S.pos = 0; if (was) start(false); };
+
+/* ---------- UI: input ---------- */
+function updComp() { $('compLbl').textContent = $('comp').value + 'ms'; }
+$('comp').oninput = () => { $('comp').dataset.touched = 1; updComp(); }; updComp();
+$('btnMic').onclick = () => enableInput();
+$('inGain').oninput = e => { $('inGainLbl').textContent = (+e.target.value > 0 ? '+' : '') + e.target.value + ' dB'; applyInput(); };
+$('micModel').onchange = e => { $('micDesc').textContent = MICS[+e.target.value].d; applyInput(); };
+['lowcut', 'inComp', 'monitor', 'inCh'].forEach(id => $(id).onchange = applyInput);
+['inDev', 'rawMode'].forEach(id => $(id).onchange = () => { if (input) enableInput(); });
+$('outDev').onchange = e => { if (ctx && ctx.setSinkId) ctx.setSinkId(e.target.value).catch(() => fail('هذا المتصفح لا يدعم تغيير مخرج الصوت.')); };
+$('latHint').onchange = () => { if (ctx) fail('يُطبَّق حجم المخزن الجديد بعد إعادة تحميل الصفحة (صدّر عملك أولًا).'); };
+if (navigator.mediaDevices) { navigator.mediaDevices.ondevicechange = listDevices; listDevices(); }
+
+/* ---------- UI: tracks ---------- */
+function drawWave(cv, t) {
+  const L = Math.max(songLen(), 1), w = cv.width = cv.clientWidth * 2 || 600, h = cv.height = 148, g = cv.getContext('2d');
+  const d = t.buffer.getChannelData(0), x0 = t.offset / L * w, x1 = (t.offset + t.buffer.duration) / L * w;
+  const css = getComputedStyle(document.documentElement);
+  g.clearRect(0, 0, w, h); g.fillStyle = css.getPropertyValue('--tile');
+  const per = d.length / Math.max(1, x1 - x0);
+  for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, x1); x++) {
+    const a = Math.floor((x - x0) * per), b = Math.min(d.length, Math.floor(a + per) + 1); let mn = 0, mx = 0;
+    for (let i = Math.max(0, a); i < b; i += Math.max(1, Math.floor(per / 40))) { if (d[i] < mn) mn = d[i]; if (d[i] > mx) mx = d[i]; }
+    g.fillRect(x, h / 2 - mx * h / 2, 1, Math.max(1, (mx - mn) * h / 2));
+  }
+}
+function renderTracks() {
+  const box = $('tracks'); box.textContent = '';
+  if (!S.tracks.length) {
+    const e = document.createElement('div'); e.className = 'empty';
+    e.textContent = 'لا توجد مسارات بعد. اختر إيقاعًا، ضع السماعات، ثم اضغط زر التسجيل الأحمر ● واعزف على العود بعد العدّ التمهيدي.';
+    box.appendChild(e); return;
+  }
+  S.tracks.forEach(t => {
+    const row = document.createElement('div'); row.className = 'trk';
+    const info = document.createElement('div'); info.className = 'trk-info';
+    const name = document.createElement('input'); name.type = 'text'; name.value = t.name; name.id = 'tn' + t.id; name.setAttribute('aria-label', 'اسم المسار');
+    name.onchange = () => { t.name = name.value; renderMixer(); };
+    const btns = document.createElement('div'); btns.className = 'row'; btns.style.gap = '4px';
+    const mk = (txt, title, fn) => { const b = document.createElement('button'); b.className = 'small'; b.textContent = txt; b.title = title; b.onclick = fn; btns.appendChild(b); return b; };
+    const off = document.createElement('span'); off.className = 'db';
+    const showOff = () => off.textContent = Math.round(t.offset * 1000) + 'ms';
+    mk('◀', 'تقديم 10ms', () => { t.offset -= .01; showOff(); renderWaves(); });
+    mk('▶', 'تأخير 10ms', () => { t.offset += .01; showOff(); renderWaves(); });
+    mk('WAV', 'تنزيل هذا المسار', () => saveBlob(wav([t.buffer.getChannelData(0)], t.buffer.sampleRate), t.name + '.wav'));
+    mk('حذف', 'حذف المسار', () => { if (t.src) try { t.src.stop(); } catch (e) {} S.tracks = S.tracks.filter(x => x !== t); applyAll(); renderTracks(); renderMixer(); });
+    showOff(); btns.appendChild(off);
+    info.append(name, btns);
+    const wb = document.createElement('div'); wb.className = 'wavebox';
+    const cv = document.createElement('canvas'), ph = document.createElement('div'); ph.className = 'playhead';
+    wb.append(cv, ph); cv._t = t;
+    wb.onclick = e => {
+      const r = wb.getBoundingClientRect(), p = (e.clientX - r.left) / r.width * Math.max(songLen(), 1);
+      const was = S.playing && !S.recording; if (S.recording) return; stop(); S.pos = p; if (was) start(false);
+    };
+    row.append(info, wb); box.appendChild(row);
+  });
+  renderWaves();
+}
+function renderWaves() { document.querySelectorAll('.wavebox canvas').forEach(cv => drawWave(cv, cv._t)); }
+window.addEventListener('resize', renderWaves);
+$('btnImport').onclick = () => $('fileIn').click();
+$('fileIn').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    await ensureCtx();
+    const b = await ctx.decodeAudioData(await f.arrayBuffer());
+    addTrack(b, f.name.replace(/\.[^.]+$/, '').slice(0, 30), 0);
+  } catch (err) { fail('تعذّر قراءة الملف الصوتي. جرّب WAV أو MP3 أو M4A.'); }
+  e.target.value = '';
+};
+
+/* ---------- UI: mixer ---------- */
+function stripEl(p, kind) {
+  const el = document.createElement('div'); el.className = 'strip ' + (kind === 'r' ? 'rhy' : kind === 'm' ? 'master' : '');
+  const key = kind === 't' ? p.id : kind, h = document.createElement('h3'); h.textContent = kind === 'm' ? 'الماستر' : p.name; el.appendChild(h);
+  const knob = (lbl, prop, min, max, step) => {
+    const k = document.createElement('label'); k.className = 'knob'; k.textContent = lbl;
+    const i = document.createElement('input'); i.type = 'range'; i.min = min; i.max = max; i.step = step; i.value = p[prop]; i.id = `k_${key}_${prop}`;
+    i.oninput = () => { p[prop] = +i.value; applyAll(); };
+    i.ondblclick = () => { i.value = p[prop] = (prop === 'send' ? .1 : 0); applyAll(); };
+    k.appendChild(i); el.appendChild(k);
+  };
+  if (kind !== 'm') {
+    knob('عالي', 'high', -12, 12, .5); knob('وسط', 'mid', -12, 12, .5); knob('منخفض', 'low', -12, 12, .5);
+    knob('صدى', 'send', 0, 1, .01); knob('يسار · يمين', 'pan', -1, 1, .05);
+    el.lastChild.firstElementChild.style.direction = 'ltr';
+    const ms = document.createElement('div'); ms.className = 'ms';
+    [['m', 'mute', 'كتم'], ['s', 'solo', 'منفرد']].forEach(([c, prop, title]) => {
+      const b = document.createElement('button'); b.className = c + (p[prop] ? ' on' : ''); b.textContent = c.toUpperCase(); b.title = title;
+      b.onclick = () => { p[prop] = !p[prop]; b.classList.toggle('on', p[prop]); applyAll(); }; ms.appendChild(b);
+    });
+    el.appendChild(ms);
+  }
+  const fz = document.createElement('div'); fz.className = 'faderzone';
+  const f = document.createElement('input'); f.type = 'range'; f.className = 'fader'; f.min = 0; f.max = 1.25; f.step = .01; f.value = p.vol; f.id = `f_${key}`;
+  f.setAttribute('aria-label', 'مستوى ' + h.textContent);
+  const db = document.createElement('div'); db.className = 'db'; db.textContent = dB(p.vol);
+  f.oninput = () => { p.vol = +f.value; db.textContent = dB(p.vol); applyAll(); };
+  const vm = document.createElement('div'); vm.className = 'vmeter'; const bar = document.createElement('i'); bar.dataset.k = key; vm.appendChild(bar);
+  fz.append(f, vm); el.append(fz, db);
+  return el;
+}
+function renderMixer() {
+  const m = $('mixer'); m.textContent = '';
+  m.appendChild(stripEl(S.rhy, 'r'));
+  S.tracks.forEach(t => m.appendChild(stripEl(t, 't')));
+  m.appendChild(stripEl(S.mst, 'm'));
+}
+$('revType').onchange = e => { if (master) master.rev.buffer = makeIR(ctx, e.target.value); };
+$('limiter').onchange = applyAll;
+
+/* ---------- Export ---------- */
+function wav(chs, sr) {
+  const n = chs[0].length, c = chs.length, v = new DataView(new ArrayBuffer(44 + n * c * 2));
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * c * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, c, true); v.setUint32(24, sr, true); v.setUint32(28, sr * c * 2, true); v.setUint16(32, c * 2, true); v.setUint16(34, 16, true);
+  w(36, 'data'); v.setUint32(40, n * c * 2, true);
+  let o = 44;
+  for (let i = 0; i < n; i++) for (let k = 0; k < c; k++) { const x = Math.max(-1, Math.min(1, chs[k][i])); v.setInt16(o, x < 0 ? x * 32768 : x * 32767, true); o += 2; }
+  return new Blob([v], {type: 'audio/wav'});
+}
+function saveBlob(blob, name) {
+  if (PREVIEW) { fail('تنزيل ملفات WAV غير متاح داخل المعاينة. افتح النسخة الكاملة من المستودع.'); return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
+async function renderMix() {
+  const withR = $('expRhythm').checked, sr = ctx ? ctx.sampleRate : 48000;
+  let len = songLen();
+  if (!len) { if (!withR) throw new Error('empty'); len = barDur() * 8; }
+  const o = new OfflineAudioContext(2, Math.ceil((len + 2.5) * sr), sr);
+  const m = buildMaster(o, o.destination, {revType: $('revType').value, vol: S.mst.vol, limiter: $('limiter').checked});
+  S.tracks.forEach(t => {
+    const st = buildStrip(o, m, t); st.apply(t, audible(t));
+    const src = o.createBufferSource(); src.buffer = t.buffer; src.connect(st.inp);
+    if (t.offset >= 0) src.start(t.offset); else src.start(0, -t.offset);
+  });
+  if (withR) {
+    const st = buildStrip(o, m, S.rhy); st.apply(S.rhy, audible(S.rhy));
+    const opts = Object.assign(rhyOpts(), {rhythm: true, click: false}), sd = stepDur();
+    for (let i = 0; i * sd < len; i++) playStep(o, st.inp, i * sd, i, opts);
+  }
+  const b = await o.startRendering();
+  return wav([b.getChannelData(0), b.getChannelData(1)], sr);
+}
+$('btnExport').onclick = async () => {
+  const st = $('expState'); stop(); st.textContent = 'يجري المزج…'; $('btnExport').disabled = true;
+  try {
+    const blob = await renderMix(); window.__lastMix = blob;
+    st.textContent = `اكتمل المزج (${(blob.size / 1048576).toFixed(1)} MB)`;
+    saveBlob(blob, 'tarab-mix.wav');
+  } catch (e) { st.textContent = ''; fail(e.message === 'empty' ? 'لا يوجد ما يُصدَّر: سجّل مسارًا أو فعّل تضمين الإيقاع.' : 'تعذّر التصدير: ' + e.message); }
+  $('btnExport').disabled = false;
+};
+
+/* ---------- Boot ---------- */
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !/INPUT|SELECT|BUTTON|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); S.playing ? stop() : start(false); }
+});
+setRhythm(0); renderTracks(); renderMixer();
+window.__studio = {S, start, stop};
+})();
+</script>
+</body>
+</html>
